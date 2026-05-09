@@ -1,0 +1,32 @@
+# Binary / data
+*.xlsx
+*.csv
+*.parquet
+*.pkl
+*.h5
+*.db
+
+# Media
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.pdf
+*.docx
+*.mp4
+
+# OS / build
+*Zone.Identifier
+Thumbs.db
+node_modules/
+__pycache__/
+.venv/
+dist/
+build/
+
+# Output
+charts/
+screenshots/
+qa_reports/
+eval-results/
+runs/
