@@ -1,9 +1,11 @@
-# Clip files — not redistributed, generate with download-memes.sh
-assets/memes/*.mp4
-assets/memes/.venv/
+# Rust
+/target
+**/*.rs.bk
+Cargo.lock.bak
 
-# Temp state files
-/tmp/.claude-meme-*
+# Local cache (downloaded GIFs) + state
+.cache/
+*.gif.part
 
 # OS
 .DS_Store

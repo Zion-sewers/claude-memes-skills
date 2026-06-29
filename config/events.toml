@@ -1,0 +1,133 @@
+# claude-memes event registry
+# ----------------------------
+# Each [events.<name>] maps a Claude Code workflow event to a Giphy search.
+# At play time the binary hits Giphy's /random endpoint with `query` as the tag,
+# caches the result, and renders it inline in your terminal.
+#
+# Edit `query` to taste. No URLs, no downloads, no placeholders — Giphy resolves
+# the GIF on demand. Add your own events by copying any block below and wiring a
+# trigger in your hooks (see `claude-memes install`).
+#
+# This file ships embedded in the binary; an installed copy lives at
+# ~/.config/claude-memes/events.toml and takes precedence when present.
+
+[settings]
+enabled = true          # master switch (also overridable per-session, see `doctor`)
+rating = "pg-13"        # Giphy content rating: g | pg | pg-13 | r
+cooldown_secs = 60      # per-event throttle so a tight test loop can't spam you
+width = 38              # render width in terminal cells (height auto from aspect)
+loops = 2               # animation loop count (0 = render a single still frame)
+max_frames = 48         # cap decoded frames so playback stays snappy
+cache_ttl_secs = 86400  # reuse a cached GIF for this long before refetching
+
+# ---- test lifecycle -------------------------------------------------------
+
+[events.red_phase]
+query = "thanos this does put a smile on my face"
+trigger = "First test failure in a run"
+
+[events.hydra]
+query = "cut off one head two more shall take its place hydra"
+trigger = "Consecutive test failure (fail -> fail)"
+
+[events.matrix_dodge]
+query = "matrix bullet dodge neo"
+trigger = "Test suite recovers (fail -> pass)"
+
+[events.tests_all_pass]
+query = "lebron james thats too easy"
+trigger = "Full test suite passes (all green)"
+
+[events.coverage_check]
+query = "thanos perfectly balanced as all things should be"
+trigger = "Coverage command runs"
+
+# ---- CI / deploy ----------------------------------------------------------
+
+[events.full_pipeline_green]
+query = "celebration green checkmark success"
+trigger = "CI pipeline fully green"
+
+[events.ci_build_fail]
+query = "leeroy jenkins"
+trigger = "CI build fails"
+
+[events.ci_deploy_success]
+query = "smells like a promotion anchorman"
+trigger = "CI deploy stage succeeds"
+
+[events.friday_deploy]
+query = "have you learned nothing"
+trigger = "Deploy command on Friday after 16:00"
+
+# ---- git / source ---------------------------------------------------------
+
+[events.ship_pr_created]
+query = "silicon valley this guy"
+trigger = "PR created"
+
+[events.noice]
+query = "noice brooklyn nine nine"
+trigger = "Lint clean / git push success"
+
+[events.scope_too_big]
+query = "himym slap bet"
+trigger = "Git diff >= 500 lines (scope creep)"
+
+[events.nothing_to_commit]
+query = "jian yang nothing"
+trigger = "No-op diff / working tree clean"
+
+# ---- workflow phases ------------------------------------------------------
+
+[events.refactor_loop]
+query = "doctor strange dormammu ive come to bargain"
+trigger = "Workflow phase = REFACTOR"
+
+[events.refactor_complete]
+query = "suits thats what i do"
+trigger = "Transition out of REFACTOR phase"
+
+# ---- skills ---------------------------------------------------------------
+
+[events.deep_research]
+query = "watchmen locked in here with me"
+trigger = "/deep-research skill invoked"
+
+[events.review_perfect]
+query = "cristiano ronaldo siuuu"
+trigger = "/review passes all layers"
+
+[events.brainstorm_start]
+query = "its always sunny pepe silvia conspiracy"
+trigger = "/brainstorming skill invoked"
+
+[events.agent_team]
+query = "avengers assemble"
+trigger = "/agent-team skill invoked"
+
+[events.skill_loaded]
+query = "loading mr bean waiting"
+trigger = "Any skill not explicitly mapped"
+
+# ---- session signals ------------------------------------------------------
+
+[events.session_start]
+query = "warcraft peon work work"
+trigger = "Session start (first turn)"
+
+[events.desperation]
+query = "this is fine dog fire"
+trigger = "Turn count >= 20 (stuck in a loop)"
+
+[events.overloaded]
+query = "gandalf fly you fools"
+trigger = "4+ active tasks"
+
+[events.not_prepared]
+query = "you are not prepared illidan"
+trigger = "Claiming done while last test result is FAIL"
+
+[events.end_of_day]
+query = "tired sleepy goodnight"
+trigger = "Session running after 22:00 or before 05:00"
