@@ -1,0 +1,32 @@
+[package]
+name = "claude-memes"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Event-driven meme GIFs for Claude Code — fetched from Giphy, rendered inline in your terminal."
+license = "MIT"
+repository = "https://github.com/ShovalBenjer/claude-memes-skills"
+readme = "README.md"
+keywords = ["claude", "giphy", "terminal", "hooks", "meme"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "claude-memes"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+anyhow = "1"
+reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls"], default-features = false }
+image = { version = "0.25", default-features = false, features = ["gif"] }
+viuer = { version = "0.9", default-features = false }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"
