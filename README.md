@@ -44,7 +44,9 @@ Rendering goes to `/dev/tty`, so the GIF lands in your real terminal even though
 
 ## Install
 
-### 1. Build & install the binary
+### 1. Get the binary
+
+Grab a prebuilt binary from [Releases](https://github.com/ShovalBenjer/claude-memes-skills/releases) (Linux x86_64/arm64, macOS Intel/Apple Silicon) and drop it on your `PATH`, or build from source:
 
 ```bash
 git clone https://github.com/ShovalBenjer/claude-memes-skills
