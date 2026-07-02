@@ -88,7 +88,10 @@ pub fn set_last_test(value: &str) {
     let _ = std::fs::write(dir.join("last-test"), value);
 }
 
-fn sanitize(event: &str) -> String {
+/// Collapse an event name to a filesystem-safe token. Shared by every module
+/// that derives a file name from an event (state files, GIF cache), so an
+/// adversarial registry key like `../../evil` can never escape its directory.
+pub fn sanitize(event: &str) -> String {
     event
         .chars()
         .map(|c| {

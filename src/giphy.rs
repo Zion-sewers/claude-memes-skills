@@ -34,7 +34,9 @@ pub fn has_api_key() -> bool {
 }
 
 fn gif_cache_path(event: &str) -> PathBuf {
-    cache_dir().join("gifs").join(format!("{event}.gif"))
+    cache_dir()
+        .join("gifs")
+        .join(format!("{}.gif", crate::state::sanitize(event)))
 }
 
 fn cache_is_fresh(path: &PathBuf, ttl_secs: u64) -> bool {
@@ -148,4 +150,19 @@ pub fn newest_cache_age() -> Option<Duration> {
         }
     }
     newest.and_then(|t| t.elapsed().ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cache_path_cannot_escape_gifs_dir() {
+        let path = gif_cache_path("../../tmp/evil");
+        let s = path.to_string_lossy();
+        assert!(!s.contains(".."), "traversal survived sanitization: {s}");
+        assert!(s.ends_with(".gif"));
+        // Still anchored under the gifs cache dir.
+        assert!(path.starts_with(cache_dir().join("gifs")));
+    }
 }

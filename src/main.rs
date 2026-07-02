@@ -384,7 +384,12 @@ fn cmd_install(print_only: bool) -> Result<()> {
         std::fs::create_dir_all(parent).ok();
     }
     if settings_path.exists() {
-        let backup = settings_path.with_extension("json.bak");
+        // Timestamped so repeated installs never clobber an earlier backup.
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let backup = settings_path.with_extension(format!("json.bak-{ts}"));
         std::fs::copy(&settings_path, &backup).ok();
     }
     std::fs::write(
@@ -412,21 +417,27 @@ fn patch_settings(settings: &mut serde_json::Value, exe: &str) {
     }
     let hooks = hooks.as_object_mut().unwrap();
 
+    // Remove only our own hook entries (command shaped like "…/claude-memes hook …"),
+    // never a whole group: foreign hooks sharing a group must survive a re-install.
+    let is_ours = |h: &serde_json::Value| {
+        h.get("command")
+            .and_then(|c| c.as_str())
+            .map(|c| c.contains("claude-memes hook"))
+            .unwrap_or(false)
+    };
     let strip = |arr: &mut serde_json::Value| {
         if let Some(list) = arr.as_array_mut() {
+            for group in list.iter_mut() {
+                if let Some(hs) = group.get_mut("hooks").and_then(|h| h.as_array_mut()) {
+                    hs.retain(|h| !is_ours(h));
+                }
+            }
             list.retain(|group| {
-                !group
+                group
                     .get("hooks")
                     .and_then(|h| h.as_array())
-                    .map(|hs| {
-                        hs.iter().any(|h| {
-                            h.get("command")
-                                .and_then(|c| c.as_str())
-                                .map(|c| c.contains("claude-memes"))
-                                .unwrap_or(false)
-                        })
-                    })
-                    .unwrap_or(false)
+                    .map(|hs| !hs.is_empty())
+                    .unwrap_or(true)
             });
         }
     };
@@ -513,6 +524,47 @@ mod tests {
         assert!(post
             .iter()
             .any(|g| g["hooks"][0]["command"] == "/other/tool"));
+    }
+
+    #[test]
+    fn patch_preserves_foreign_hooks_sharing_a_group() {
+        // A group mixing a foreign hook with an old claude-memes entry must keep
+        // the foreign hook; only our entry is removed on re-install.
+        let mut s = serde_json::json!({
+            "hooks": {"PostToolUse": [
+                {"matcher":"Bash","hooks":[
+                    {"type":"command","command":"/other/tool"},
+                    {"type":"command","command":"/old/path/claude-memes hook bash"}
+                ]}
+            ]}
+        });
+        patch_settings(&mut s, "/usr/bin/claude-memes");
+        let post = s["hooks"]["PostToolUse"].as_array().unwrap();
+        // mixed group (now foreign-only) + our Bash + our Skill
+        assert_eq!(post.len(), 3);
+        let mixed = &post[0]["hooks"].as_array().unwrap();
+        assert_eq!(mixed.len(), 1);
+        assert_eq!(mixed[0]["command"], "/other/tool");
+    }
+
+    #[test]
+    fn patch_does_not_strip_lookalike_commands() {
+        // A command that merely contains "claude-memes" as a path fragment is
+        // not ours and must survive.
+        let mut s = serde_json::json!({
+            "hooks": {"PostToolUse": [
+                {"matcher":"Bash","hooks":[
+                    {"type":"command","command":"/opt/claude-memes-utils/helper"}
+                ]}
+            ]}
+        });
+        patch_settings(&mut s, "/usr/bin/claude-memes");
+        let post = s["hooks"]["PostToolUse"].as_array().unwrap();
+        assert_eq!(post.len(), 3);
+        assert_eq!(
+            post[0]["hooks"][0]["command"],
+            "/opt/claude-memes-utils/helper"
+        );
     }
 
     #[test]
