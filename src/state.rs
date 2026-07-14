@@ -61,17 +61,34 @@ pub fn cooldown_ok(event: &str, cooldown_secs: u64) -> bool {
     true
 }
 
-/// Returns true the first time it is called for `event` in a session, false after.
-/// Used by once-per-session signals (session start, desperation, etc.).
-pub fn fire_once(event: &str) -> bool {
+/// Returns true the first time it is called for `event` within `session`, false
+/// after. Keyed by the Claude Code session id so "once per session" survives
+/// long-lived machines where /tmp persists across many sessions.
+pub fn fire_once(session: &str, event: &str) -> bool {
     let dir = state_dir().join("once");
     let _ = std::fs::create_dir_all(&dir);
-    let file = dir.join(sanitize(event));
+    let file = dir.join(format!("{}--{}", sanitize(session), sanitize(event)));
     if file.exists() {
         return false;
     }
     let _ = std::fs::write(&file, "1");
     true
+}
+
+/// Increment and return this session's turn counter. Each Stop event is one
+/// completed turn, so claude-memes counts turns itself — no external
+/// msg-counter hook required.
+pub fn bump_turns(session: &str) -> u64 {
+    let dir = state_dir().join("turns");
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join(sanitize(session));
+    let n = std::fs::read_to_string(&file)
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .unwrap_or(0)
+        + 1;
+    let _ = std::fs::write(&file, n.to_string());
+    n
 }
 
 /// Last-seen test outcome, used for fail->fail and fail->pass transitions.
@@ -129,8 +146,25 @@ mod tests {
     #[test]
     fn fire_once_only_first_time() {
         let _g = isolate();
-        assert!(fire_once("evt_once"));
-        assert!(!fire_once("evt_once"));
+        assert!(fire_once("sess_a", "evt_once"));
+        assert!(!fire_once("sess_a", "evt_once"));
+    }
+
+    #[test]
+    fn fire_once_is_scoped_per_session() {
+        let _g = isolate();
+        assert!(fire_once("sess_1", "evt"));
+        // A different session gets its own fresh once-slot.
+        assert!(fire_once("sess_2", "evt"));
+        assert!(!fire_once("sess_1", "evt"));
+    }
+
+    #[test]
+    fn turns_count_up_per_session() {
+        let _g = isolate();
+        assert_eq!(bump_turns("sess_t"), 1);
+        assert_eq!(bump_turns("sess_t"), 2);
+        assert_eq!(bump_turns("other"), 1);
     }
 
     #[test]

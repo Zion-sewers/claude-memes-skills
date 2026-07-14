@@ -51,7 +51,7 @@ jobs:
       - name: Build release
         run: cargo build --release
 
-      - name: Resolve a few events against the live Giphy API
+      - name: Resolve every registry event against the live Giphy API
         env:
           GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
         run: |
@@ -59,7 +59,11 @@ jobs:
             echo "GIPHY_API_KEY not available (fork PR?) — skipping live smoke test."
             exit 0
           fi
-          set -x
-          ./target/release/claude-memes play tests_all_pass --check
-          ./target/release/claude-memes play ci_deploy_success --check
-          ./target/release/claude-memes play deep_research --check
+          failed=0
+          for event in $(grep -oP '^\[events\.\K[^]]+' config/events.toml); do
+            if ./target/release/claude-memes play "$event" --check; then :; else
+              echo "::error::event '$event' failed to resolve a GIF"
+              failed=1
+            fi
+          done
+          exit $failed

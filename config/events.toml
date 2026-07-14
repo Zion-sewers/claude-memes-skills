@@ -78,16 +78,6 @@ trigger = "Git diff >= 500 lines (scope creep)"
 query = "jian yang nothing"
 trigger = "No-op diff / working tree clean"
 
-# ---- workflow phases ------------------------------------------------------
-
-[events.refactor_loop]
-query = "doctor strange dormammu ive come to bargain"
-trigger = "Workflow phase = REFACTOR"
-
-[events.refactor_complete]
-query = "suits thats what i do"
-trigger = "Transition out of REFACTOR phase"
-
 # ---- skills ---------------------------------------------------------------
 
 [events.deep_research]
@@ -119,10 +109,6 @@ trigger = "Session start (first turn)"
 [events.desperation]
 query = "this is fine dog fire"
 trigger = "Turn count >= 20 (stuck in a loop)"
-
-[events.overloaded]
-query = "gandalf fly you fools"
-trigger = "4+ active tasks"
 
 [events.not_prepared]
 query = "you are not prepared illidan"

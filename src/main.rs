@@ -166,7 +166,12 @@ fn events_for_hook(kind: &HookKind, payload: &serde_json::Value) -> Vec<String> 
                     if let Some(s) = d.set_last_test {
                         state::set_last_test(s);
                     }
-                    vec![d.event.to_string()]
+                    // A deploy landing on Friday evening earns the warning clip instead.
+                    if d.event == "ci_deploy_success" && is_friday_evening() {
+                        vec!["friday_deploy".to_string()]
+                    } else {
+                        vec![d.event.to_string()]
+                    }
                 }
                 None => vec![],
             }
@@ -181,24 +186,32 @@ fn events_for_hook(kind: &HookKind, payload: &serde_json::Value) -> Vec<String> 
             }
             vec![detect::detect_skill(skill).to_string()]
         }
-        HookKind::Stop => stop_events(),
+        HookKind::Stop => {
+            let session = payload
+                .get("session_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("default");
+            stop_events(session)
+        }
     }
 }
 
-/// Stop-event signals. Each fires at most once per session.
-fn stop_events() -> Vec<String> {
+/// Stop-event signals. Each fires at most once per session (keyed by the
+/// Claude Code session id from the hook payload).
+fn stop_events(session: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut push_once = |event: &str| {
-        if state::fire_once(event) {
+        if state::fire_once(session, event) {
             out.push(event.to_string());
         }
     };
 
-    let turns = read_int("/tmp/.claude-msg-count");
-    if turns == Some(1) {
+    // Every Stop event is one completed turn; count them ourselves.
+    let turns = state::bump_turns(session);
+    if turns == 1 {
         push_once("session_start");
     }
-    if turns.map(|t| t >= 20).unwrap_or(false) {
+    if turns >= 20 {
         push_once("desperation");
     }
     if state::last_test().as_deref() == Some("fail") {
@@ -462,8 +475,15 @@ fn home_dir() -> Option<std::path::PathBuf> {
     std::env::var_os("HOME").map(std::path::PathBuf::from)
 }
 
-fn read_int(path: &str) -> Option<i64> {
-    std::fs::read_to_string(path).ok()?.trim().parse().ok()
+/// Friday (ISO weekday 5) at or after 16:00 local time.
+fn is_friday_evening() -> bool {
+    let weekday = Command::new("date").arg("+%u").output().ok().and_then(|o| {
+        String::from_utf8_lossy(&o.stdout)
+            .trim()
+            .parse::<u32>()
+            .ok()
+    });
+    weekday == Some(5) && local_hour().map(|h| h >= 16).unwrap_or(false)
 }
 
 /// Sum of added+deleted lines vs HEAD, via `git diff --numstat`. 0 on any error.
