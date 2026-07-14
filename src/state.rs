@@ -61,11 +61,23 @@ pub fn cooldown_ok(event: &str, cooldown_secs: u64) -> bool {
     true
 }
 
+/// Filesystem key for a session id: the sanitized id (for human readability)
+/// plus an FNV-1a hash of the raw id, so two ids that sanitize identically
+/// still get distinct keys.
+fn session_key(session: &str) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in session.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("{}-{hash:016x}", sanitize(session))
+}
+
 /// Returns true the first time it is called for `event` within `session`, false
 /// after. One subdirectory per session: the directory boundary is a separator
 /// `sanitize()` can never emit, so distinct (session, event) pairs can't collide.
 pub fn fire_once(session: &str, event: &str) -> bool {
-    let dir = state_dir().join("once").join(sanitize(session));
+    let dir = state_dir().join("once").join(session_key(session));
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join(sanitize(event));
     if file.exists() {
@@ -89,7 +101,7 @@ pub fn bump_turns(session: &str) -> u64 {
     std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(dir.join(sanitize(session)))
+        .open(dir.join(session_key(session)))
         .and_then(|mut f| {
             f.write_all(b".")?;
             f.metadata()
@@ -155,6 +167,18 @@ mod tests {
         let _g = isolate();
         assert!(fire_once("sess_a", "evt_once"));
         assert!(!fire_once("sess_a", "evt_once"));
+    }
+
+    #[test]
+    fn sessions_sanitizing_identically_do_not_collide() {
+        let _g = isolate();
+        // "sess:1" and "sess.1" both sanitize to "sess_1"; the hash suffix
+        // must still keep their state separate.
+        assert!(fire_once("sess:1", "evt"));
+        assert!(fire_once("sess.1", "evt"));
+        assert!(!fire_once("sess:1", "evt"));
+        assert_eq!(bump_turns("sess:1"), 1);
+        assert_eq!(bump_turns("sess.1"), 1);
     }
 
     #[test]
