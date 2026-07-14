@@ -46,9 +46,12 @@ Rendering goes to `/dev/tty`, so the GIF lands in your real terminal even though
 
 ### 1. Get the binary
 
-Grab a prebuilt binary from [Releases](https://github.com/ShovalBenjer/claude-memes-skills/releases) (Linux x86_64/arm64, macOS Intel/Apple Silicon) and drop it on your `PATH`, or build from source:
+Grab a prebuilt binary from [Releases](https://github.com/ShovalBenjer/claude-memes-skills/releases) (Linux x86_64/arm64, macOS Intel/Apple Silicon) and drop it on your `PATH`, or:
 
 ```bash
+cargo binstall claude-memes     # prebuilt, via cargo-binstall
+
+# or build from source
 git clone https://github.com/ShovalBenjer/claude-memes-skills
 cd claude-memes-skills
 cargo install --path .          # installs `claude-memes` to ~/.cargo/bin
@@ -152,6 +155,7 @@ Claude Code lifecycle
 ```
 
 - **Detection** (`src/detect.rs`) — pure functions map a tool payload to an event, including fail→fail / fail→pass transition tracking. Fully unit-tested.
+- **Session signals** — the Stop hook counts its own turns per Claude Code session id (first turn → `session_start`, ≥ 20 turns → `desperation`), checks the git diff size, and knows what time it is. No external counter hooks needed.
 - **Giphy** (`src/giphy.rs`) — one `/random` call per event, cached to `~/.cache/claude-memes/gifs/` with a TTL so a tight loop hits the network at most once a day.
 - **Render** (`src/render.rs`) — decodes GIF frames with the `image` crate and animates them via `viuer`.
 - **State** (`src/state.rs`) — per-event cooldown + fire-once-per-session, all under a temp dir.

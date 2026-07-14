@@ -14,6 +14,12 @@ categories = ["command-line-utilities"]
 name = "claude-memes"
 path = "src/main.rs"
 
+# `cargo binstall claude-memes` pulls the prebuilt tarballs published by
+# .github/workflows/release.yml instead of compiling from source.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/claude-memes-v{ version }-{ target }.tar.gz"
+pkg-fmt = "tgz"
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
