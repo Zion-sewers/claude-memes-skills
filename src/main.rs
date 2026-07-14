@@ -186,13 +186,12 @@ fn events_for_hook(kind: &HookKind, payload: &serde_json::Value) -> Vec<String> 
             }
             vec![detect::detect_skill(skill).to_string()]
         }
-        HookKind::Stop => {
-            let session = payload
-                .get("session_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("default");
-            stop_events(session)
-        }
+        HookKind::Stop => match payload.get("session_id").and_then(|v| v.as_str()) {
+            Some(session) => stop_events(session),
+            // Session signals are meaningless without a session identity; a
+            // shared fallback bucket would leak fire-once state across sessions.
+            None => vec![],
+        },
     }
 }
 
@@ -475,15 +474,17 @@ fn home_dir() -> Option<std::path::PathBuf> {
     std::env::var_os("HOME").map(std::path::PathBuf::from)
 }
 
+/// Local (ISO weekday 1–7, hour 0–23) from a single `date` invocation.
+fn local_weekday_hour() -> Option<(u32, u32)> {
+    let out = Command::new("date").arg("+%u %H").output().ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut parts = text.split_whitespace();
+    Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
+}
+
 /// Friday (ISO weekday 5) at or after 16:00 local time.
 fn is_friday_evening() -> bool {
-    let weekday = Command::new("date").arg("+%u").output().ok().and_then(|o| {
-        String::from_utf8_lossy(&o.stdout)
-            .trim()
-            .parse::<u32>()
-            .ok()
-    });
-    weekday == Some(5) && local_hour().map(|h| h >= 16).unwrap_or(false)
+    matches!(local_weekday_hour(), Some((5, h)) if h >= 16)
 }
 
 /// Sum of added+deleted lines vs HEAD, via `git diff --numstat`. 0 on any error.
@@ -508,10 +509,9 @@ fn git_diff_total() -> i64 {
         .sum()
 }
 
-/// Local hour [0,23] via `date +%H` (uses the system timezone). None on failure.
+/// Local hour [0,23] (system timezone). None on failure.
 fn local_hour() -> Option<u32> {
-    let out = Command::new("date").arg("+%H").output().ok()?;
-    String::from_utf8_lossy(&out.stdout).trim().parse().ok()
+    local_weekday_hour().map(|(_, h)| h)
 }
 
 #[cfg(test)]

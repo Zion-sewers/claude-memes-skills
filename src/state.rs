@@ -62,12 +62,12 @@ pub fn cooldown_ok(event: &str, cooldown_secs: u64) -> bool {
 }
 
 /// Returns true the first time it is called for `event` within `session`, false
-/// after. Keyed by the Claude Code session id so "once per session" survives
-/// long-lived machines where /tmp persists across many sessions.
+/// after. One subdirectory per session: the directory boundary is a separator
+/// `sanitize()` can never emit, so distinct (session, event) pairs can't collide.
 pub fn fire_once(session: &str, event: &str) -> bool {
-    let dir = state_dir().join("once");
+    let dir = state_dir().join("once").join(sanitize(session));
     let _ = std::fs::create_dir_all(&dir);
-    let file = dir.join(format!("{}--{}", sanitize(session), sanitize(event)));
+    let file = dir.join(sanitize(event));
     if file.exists() {
         return false;
     }
@@ -78,17 +78,24 @@ pub fn fire_once(session: &str, event: &str) -> bool {
 /// Increment and return this session's turn counter. Each Stop event is one
 /// completed turn, so claude-memes counts turns itself — no external
 /// msg-counter hook required.
+///
+/// Append-only: one byte per turn, count = file length. O_APPEND writes are
+/// atomic, so racing invocations can't lose an increment the way a
+/// read-modify-write could.
 pub fn bump_turns(session: &str) -> u64 {
+    use std::io::Write;
     let dir = state_dir().join("turns");
     let _ = std::fs::create_dir_all(&dir);
-    let file = dir.join(sanitize(session));
-    let n = std::fs::read_to_string(&file)
-        .ok()
-        .and_then(|s| s.trim().parse::<u64>().ok())
-        .unwrap_or(0)
-        + 1;
-    let _ = std::fs::write(&file, n.to_string());
-    n
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join(sanitize(session)))
+        .and_then(|mut f| {
+            f.write_all(b".")?;
+            f.metadata()
+        })
+        .map(|m| m.len())
+        .unwrap_or(1)
 }
 
 /// Last-seen test outcome, used for fail->fail and fail->pass transitions.

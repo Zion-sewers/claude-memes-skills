@@ -59,8 +59,16 @@ jobs:
             echo "GIPHY_API_KEY not available (fork PR?) — skipping live smoke test."
             exit 0
           fi
+          # Portable extraction (no GNU-only grep -P), and fail loudly if it
+          # yields nothing so a parse failure can never masquerade as a pass.
+          events=$(grep -E '^\[events\.' config/events.toml | sed -E 's/^\[events\.//; s/\]$//')
+          if [ -z "$events" ]; then
+            echo "::error::extracted zero events from config/events.toml — sweep would be vacuous"
+            exit 1
+          fi
+          echo "sweeping $(echo "$events" | wc -w) events"
           failed=0
-          for event in $(grep -oP '^\[events\.\K[^]]+' config/events.toml); do
+          for event in $events; do
             if ./target/release/claude-memes play "$event" --check; then :; else
               echo "::error::event '$event' failed to resolve a GIF"
               failed=1
