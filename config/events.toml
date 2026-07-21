@@ -19,6 +19,8 @@ width = 38              # render width in terminal cells (height auto from aspec
 loops = 2               # animation loop count (0 = render a single still frame)
 max_frames = 48         # cap decoded frames so playback stays snappy
 cache_ttl_secs = 86400  # reuse a cached GIF for this long before refetching
+notify = "osc9"         # hook notification style: osc9 (iTerm2/WezTerm/Windows Terminal) | osc777 (Ghostty/Warp/urxvt) | off
+watch_port = 42741      # localhost port the `claude-memes watch` daemon listens on
 
 # ---- test lifecycle -------------------------------------------------------
 

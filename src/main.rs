@@ -5,9 +5,12 @@
 //! renders it inline in your terminal. No yt-dlp, no ffmpeg, no popups.
 
 mod config;
+mod daemon;
 mod detect;
 mod giphy;
+mod notify;
 mod render;
+mod shapes;
 mod state;
 
 use std::io::Read;
@@ -57,6 +60,14 @@ enum Cmd {
         #[arg(long)]
         print: bool,
     },
+    /// Run the render daemon: hook-triggered memes play inline in this terminal.
+    Watch {
+        /// Override the listen port (default from settings: 42741).
+        #[arg(long)]
+        port: Option<u16>,
+    },
+    /// Print the hook payload shapes observed so far (field names only, no values).
+    Shapes,
 }
 
 #[derive(Subcommand)]
@@ -67,6 +78,8 @@ enum HookKind {
     Skill,
     /// Stop
     Stop,
+    /// Any other event: record its payload shape, take no action.
+    Observe,
 }
 
 fn main() {
@@ -92,7 +105,24 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::List => cmd_list(),
         Cmd::Doctor => cmd_doctor(),
         Cmd::Install { print } => cmd_install(print),
+        Cmd::Watch { port } => cmd_watch(port),
+        Cmd::Shapes => {
+            shapes::print_all();
+            Ok(())
+        }
     }
+}
+
+// ----- watch ---------------------------------------------------------------
+
+fn cmd_watch(port_override: Option<u16>) -> Result<()> {
+    let reg = Registry::load()?;
+    let port = port_override.unwrap_or(reg.settings.watch_port);
+    daemon::run(port, |event| {
+        if let Err(e) = cmd_play(event, false, false) {
+            eprintln!("claude-memes watch: {e:#}");
+        }
+    })
 }
 
 // ----- play ----------------------------------------------------------------
@@ -126,28 +156,73 @@ fn cmd_play(event: &str, force: bool, check: bool) -> Result<()> {
 
 fn cmd_hook(kind: HookKind) -> Result<()> {
     // Hooks must never break a session: emit valid JSON and exit 0 regardless.
-    let result = (|| -> Result<()> {
-        let reg = Registry::load()?;
-        if !state::is_enabled(reg.settings.enabled) {
-            return Ok(());
-        }
+    let output = (|| -> Result<serde_json::Value> {
+        let empty = serde_json::json!({});
         let mut input = String::new();
         std::io::stdin().read_to_string(&mut input).ok();
         let payload: serde_json::Value =
             serde_json::from_str(&input).unwrap_or(serde_json::Value::Null);
 
-        for event in events_for_hook(&kind, &payload) {
-            background_play(&event);
+        // Record what actually arrives (field names only, never values) —
+        // the per-event payload schema is undocumented and shifts.
+        if !payload.is_null() {
+            shapes::record(kind_label(&kind), &payload);
         }
-        Ok(())
+
+        let reg = Registry::load()?;
+        if !state::is_enabled(reg.settings.enabled) {
+            return Ok(empty);
+        }
+
+        let mut sequence = None;
+        for event in events_for_hook(&kind, &payload) {
+            let delivered = deliver(&reg, &event);
+            // First undeliverable event falls back to a terminalSequence
+            // notification (one per hook response).
+            if !delivered && sequence.is_none() {
+                let body = match reg.event(&event) {
+                    Some(ev) if !ev.trigger.is_empty() => {
+                        format!("{event} — {}", ev.trigger)
+                    }
+                    _ => event.clone(),
+                };
+                sequence = notify::sequence(&reg.settings.notify, "claude-memes", &body);
+            }
+        }
+        Ok(match sequence {
+            Some(seq) => serde_json::json!({ "terminalSequence": seq }),
+            None => empty,
+        })
     })();
 
-    if let Err(e) = result {
-        eprintln!("claude-memes hook: {e:#}");
-    }
     // Claude Code reads this stdout as the hook result.
-    println!("{{}}");
+    match output {
+        Ok(value) => println!("{value}"),
+        Err(e) => {
+            eprintln!("claude-memes hook: {e:#}");
+            println!("{{}}");
+        }
+    }
     Ok(())
+}
+
+fn kind_label(kind: &HookKind) -> &'static str {
+    match kind {
+        HookKind::Bash => "PostToolUse[Bash]",
+        HookKind::Skill => "PostToolUse[Skill]",
+        HookKind::Stop => "Stop",
+        HookKind::Observe => "Observe",
+    }
+}
+
+/// Delivery tiers: watch daemon (inline GIF in the user's own terminal) →
+/// legacy /dev/tty spawn (pre-2.1.141 Claude Code) → not delivered (caller
+/// falls back to a terminalSequence notification).
+fn deliver(reg: &Registry, event: &str) -> bool {
+    if daemon::try_send(reg.settings.watch_port, event) {
+        return true;
+    }
+    background_play(event)
 }
 
 fn events_for_hook(kind: &HookKind, payload: &serde_json::Value) -> Vec<String> {
@@ -186,6 +261,7 @@ fn events_for_hook(kind: &HookKind, payload: &serde_json::Value) -> Vec<String> 
             }
             vec![detect::detect_skill(skill).to_string()]
         }
+        HookKind::Observe => vec![],
         HookKind::Stop => match payload.get("session_id").and_then(|v| v.as_str()) {
             Some(session) => stop_events(session),
             // Session signals are meaningless without a session identity; a
@@ -236,23 +312,25 @@ fn response_text(payload: &serde_json::Value) -> String {
     }
 }
 
-/// Spawn a detached `play` that renders to the controlling terminal (`/dev/tty`),
-/// bypassing the hook's harness-captured stdout. If there is no tty (e.g. a
-/// cloud session), rendering is skipped rather than dumped into a pipe.
-fn background_play(event: &str) {
+/// Spawn a detached `play` that renders to the controlling terminal
+/// (`/dev/tty`). Only works on harness versions where hooks still have a
+/// controlling terminal; current Claude Code does not, in which case the open
+/// fails and we report undelivered so the caller can fall back.
+fn background_play(event: &str) -> bool {
     let Ok(exe) = std::env::current_exe() else {
-        return;
+        return false;
     };
     let Ok(tty) = std::fs::OpenOptions::new().write(true).open("/dev/tty") else {
-        return;
+        return false;
     };
-    let _ = Command::new(exe)
+    Command::new(exe)
         .arg("play")
         .arg(event)
         .stdin(Stdio::null())
         .stdout(Stdio::from(tty))
         .stderr(Stdio::null())
-        .spawn();
+        .spawn()
+        .is_ok()
 }
 
 // ----- list / doctor -------------------------------------------------------
@@ -585,6 +663,29 @@ mod tests {
             post[0]["hooks"][0]["command"],
             "/opt/claude-memes-utils/helper"
         );
+    }
+
+    #[test]
+    fn plugin_hooks_json_is_valid_and_calls_real_subcommands() {
+        let raw = include_str!("../hooks/hooks.json");
+        let v: serde_json::Value = serde_json::from_str(raw).expect("hooks.json must parse");
+        let hooks = v.get("hooks").and_then(|h| h.as_object()).unwrap();
+        assert!(hooks.contains_key("PostToolUse"));
+        assert!(hooks.contains_key("Stop"));
+        // Every command must be a claude-memes hook subcommand we actually have.
+        for group_list in hooks.values() {
+            for group in group_list.as_array().unwrap() {
+                for hook in group["hooks"].as_array().unwrap() {
+                    let cmd = hook["command"].as_str().unwrap();
+                    assert!(cmd.starts_with("claude-memes hook "), "unexpected: {cmd}");
+                    let sub = cmd.strip_prefix("claude-memes hook ").unwrap();
+                    assert!(
+                        ["bash", "skill", "stop", "observe"].contains(&sub),
+                        "unknown hook subcommand in hooks.json: {sub}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

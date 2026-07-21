@@ -59,6 +59,14 @@ cargo install --path .          # installs `claude-memes` to ~/.cargo/bin
 
 ### 2. Wire up the hooks
 
+**As a Claude Code plugin (recommended):** this repo is a plugin
+(`.claude-plugin/plugin.json` + `hooks/hooks.json`) — add it via your plugin
+marketplace flow and the hooks register themselves, merging non-invasively
+with any hooks you already have. The same plugin format is auto-detected by
+VS Code Copilot agent mode.
+
+**Or classic install:**
+
 ```bash
 claude-memes install            # patches ~/.claude/settings.json + seeds the registry
 ```
@@ -68,6 +76,20 @@ This is idempotent and backs up your settings first. Preview without writing:
 ```bash
 claude-memes install --print
 ```
+
+### 2½. How memes reach your eyes
+
+Modern Claude Code runs hooks with **no controlling terminal**, so delivery is
+tiered by capability:
+
+1. **`claude-memes watch`** running in any terminal pane → full inline GIFs
+   land there (hooks hand events to it over localhost).
+2. No daemon → a **desktop notification** via the hook `terminalSequence`
+   field (OSC 9 by default; set `notify = "osc777"` for Ghostty/Warp, or
+   `"off"`). Requires Claude Code ≥ 2.1.141.
+3. Older Claude Code with a hook tty → legacy direct inline rendering still works.
+
+`claude-memes play <event>` always renders inline — it runs in your own terminal.
 
 ### 3. Set your Giphy key
 
@@ -136,11 +158,16 @@ Or set `enabled = false` in the registry for a permanent off.
 
 ```
 claude-memes play <event> [--force] [--check]   render an event (--check = fetch+decode only)
-claude-memes hook <bash|skill|stop>             hook entry point (reads tool JSON on stdin)
+claude-memes hook <bash|skill|stop|observe>     hook entry point (reads tool JSON on stdin)
+claude-memes watch [--port N]                   render daemon: hook memes play in this terminal
+claude-memes shapes                             observed hook payload shapes (field names only)
 claude-memes list                               list events + queries
 claude-memes doctor                             diagnostics
 claude-memes install [--print]                  patch settings.json + seed registry
 ```
+
+> Privacy note: `hook observe` and shape logging record **field names only** —
+> never prompts, commands, or tool output.
 
 ---
 
