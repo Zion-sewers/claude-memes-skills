@@ -44,6 +44,15 @@ pub struct Settings {
     /// Localhost port for the `watch` daemon.
     #[serde(default = "default_watch_port")]
     pub watch_port: u16,
+    /// Auto mode: semantically match unmapped workflow moments to emotion hubs.
+    #[serde(default = "default_true")]
+    pub auto: bool,
+    /// Hard hourly cap on auto-mode firings.
+    #[serde(default = "default_auto_per_hour")]
+    pub auto_per_hour: u32,
+    /// Minimum cosine similarity for an auto suggestion to fire.
+    #[serde(default = "default_auto_threshold")]
+    pub auto_threshold: f32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -68,6 +77,9 @@ impl Default for Settings {
                 cache_ttl_secs: default_cache_ttl(),
                 notify: default_notify(),
                 watch_port: default_watch_port(),
+                auto: true,
+                auto_per_hour: default_auto_per_hour(),
+                auto_threshold: default_auto_threshold(),
             })
     }
 }
@@ -98,6 +110,16 @@ fn default_notify() -> String {
 }
 fn default_watch_port() -> u16 {
     42_741
+}
+fn default_auto_per_hour() -> u32 {
+    6
+}
+fn default_auto_threshold() -> f32 {
+    // Calibrated against potion-base-8M on realistic workflow concepts:
+    // strong concept→hub matches score ~0.39–0.54, weak/ambiguous ones
+    // ~0.29–0.31. 0.28 admits every good match while the hourly budget
+    // caps volume.
+    0.28
 }
 
 impl Registry {

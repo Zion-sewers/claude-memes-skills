@@ -1,6 +1,6 @@
 [package]
 name = "claude-memes"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2021"
 rust-version = "1.82"
 description = "Event-driven meme GIFs for Claude Code — fetched from Giphy, rendered inline in your terminal."
@@ -29,6 +29,7 @@ anyhow = "1"
 reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls"], default-features = false }
 image = { version = "0.25", default-features = false, features = ["gif"] }
 viuer = { version = "0.9", default-features = false }
+model2vec-rs = "0.1"
 
 [profile.release]
 opt-level = "z"

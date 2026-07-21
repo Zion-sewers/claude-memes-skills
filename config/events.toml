@@ -21,6 +21,9 @@ max_frames = 48         # cap decoded frames so playback stays snappy
 cache_ttl_secs = 86400  # reuse a cached GIF for this long before refetching
 notify = "osc9"         # hook notification style: osc9 (iTerm2/WezTerm/Windows Terminal) | osc777 (Ghostty/Warp/urxvt) | off
 watch_port = 42741      # localhost port the `claude-memes watch` daemon listens on
+auto = true             # semantically match unmapped workflow moments to emotion hubs (config/hubs.toml)
+auto_per_hour = 6       # hard hourly cap on auto-mode firings
+auto_threshold = 0.28   # minimum cosine similarity for an auto suggestion to fire (calibrated)
 
 # ---- test lifecycle -------------------------------------------------------
 
