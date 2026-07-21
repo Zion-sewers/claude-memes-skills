@@ -25,6 +25,27 @@ Claude Code fires shell hooks on lifecycle events (`PostToolUse`, `Stop`). `clau
 
 Full list: `claude-memes list`.
 
+## Auto mode
+
+Beyond the 22 curated events, **auto mode** (on by default) handles the long
+tail: any unmapped workflow moment — a weird build failure, an exotic tool, an
+unlisted skill — is embedded locally and matched against ~40 *emotion hubs*
+(`config/hubs.toml`), each carrying a curated Giphy query pool:
+
+```
+$ claude-memes find "npm ERR! ERESOLVE unable to resolve dependency tree"
+→  0.536  dependency_hell   tangled in christmas lights | domino chain reaction fail
+```
+
+- **Local + private**: a 30MB static-embedding model ([Model2Vec
+  potion-base-8M](https://huggingface.co/minishlab/potion-base-8M)), downloaded
+  once on first `claude-memes find` — ~50µs per match, no API calls, concepts
+  never leave your machine. Hooks never trigger the download.
+- **Gated hard**: similarity threshold (calibrated 0.28) → per-hub novelty
+  (1/hour) → hourly budget (`auto_per_hour = 6`). A boring `ls` never reaches
+  the model at all.
+- **Off switch**: `auto = false` in the registry.
+
 ---
 
 ## Why it's built this way

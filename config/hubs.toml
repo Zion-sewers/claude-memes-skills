@@ -1,0 +1,174 @@
+# claude-memes emotion hubs — the semantic layer for auto mode.
+# ---------------------------------------------------------------
+# Auto mode embeds a workflow concept (an unmapped command, skill, or moment)
+# and matches it against these hubs by cosine similarity. `description` is the
+# text that gets embedded; `queries` is the curated Giphy pool the hub draws
+# from (one is picked per firing). Hub-and-spoke: concepts route to a hub, the
+# hub carries the joke — direct concept→GIF search is noisier and less funny.
+#
+# Ships embedded in the binary; edit descriptions/queries and rebuild, or use
+# `claude-memes find "<concept>"` to see how a concept routes.
+
+[hubs.triumph]
+description = "complete success, everything works perfectly, total victory"
+queries = ["we did it celebration", "victory dance excited"]
+
+[hubs.despair]
+description = "everything is broken and hopeless, nothing works at all"
+queries = ["head in hands despair", "why me frustrated"]
+
+[hubs.this_is_fine]
+description = "pretending everything is fine while everything is on fire"
+queries = ["this is fine dog fire", "awkward smile panic inside"]
+
+[hubs.recovery]
+description = "narrow escape from disaster, saved at the very last second"
+queries = ["matrix bullet dodge neo", "phew close call wipe forehead"]
+
+[hubs.repeated_failure]
+description = "the same error keeps happening again and again no matter what"
+queries = ["groundhog day again", "bang head against wall"]
+
+[hubs.confusion]
+description = "utterly confused, nothing makes sense, what is even going on"
+queries = ["confused math lady", "john travolta confused pulp fiction"]
+
+[hubs.eureka]
+description = "sudden insight, finally understanding the problem after struggling"
+queries = ["eureka light bulb moment", "finally i understand"]
+
+[hubs.waiting]
+description = "long boring wait for a slow process to finish"
+queries = ["skeleton waiting", "tapping fingers impatient"]
+
+[hubs.blazing_fast]
+description = "extremely fast, instant results, speed"
+queries = ["gotta go fast sonic", "lightning fast typing"]
+
+[hubs.painfully_slow]
+description = "painfully slow progress, crawling along"
+queries = ["zootopia sloth slow", "snail crawling slow motion"]
+
+[hubs.scope_creep]
+description = "the task keeps growing far beyond the original plan"
+queries = ["himym slap bet", "this keeps getting worse"]
+
+[hubs.yak_shaving]
+description = "endless chain of prerequisite tasks before the actual work can start"
+queries = ["falling down rabbit hole", "one thing leads to another chaos"]
+
+[hubs.merge_conflict]
+description = "two code changes colliding, merge conflict between branches"
+queries = ["tug of war fight", "spiderman pointing at spiderman"]
+
+[hubs.legacy_code]
+description = "ancient scary untouchable legacy code nobody understands"
+queries = ["indiana jones ancient temple trap", "dont touch it fragile"]
+
+[hubs.tech_debt]
+description = "shortcuts and hacks piling up into an unmaintainable mess"
+queries = ["jenga tower collapsing", "sweeping under the rug"]
+
+[hubs.deploy_fear]
+description = "anxiety about a risky deployment that could break production"
+queries = ["nervous sweating bullets", "praying please work"]
+
+[hubs.rollback]
+description = "urgently undoing a bad release, roll it back now"
+queries = ["abort mission alarm", "rewind reverse quick"]
+
+[hubs.security_scare]
+description = "security vulnerability or breach discovered, credentials leaked"
+queries = ["hackerman typing", "alarm red alert panic"]
+
+[hubs.data_loss]
+description = "accidentally deleted something important, data is gone"
+queries = ["dropped ice cream sad", "watching everything burn"]
+
+[hubs.tiny_bug_huge_damage]
+description = "a tiny off by one bug causing enormous problems"
+queries = ["butterfly effect domino", "small dog big destruction"]
+
+[hubs.heisenbug]
+description = "the bug disappears whenever you try to observe or debug it"
+queries = ["magic disappearing act", "gone like a ghost"]
+
+[hubs.works_on_my_machine]
+description = "it works locally on my machine but fails everywhere else"
+queries = ["shrug well it works for me", "confused looking at computer"]
+
+[hubs.rubber_duck]
+description = "explaining the problem out loud suddenly reveals the answer"
+queries = ["rubber duck", "talking to myself realization"]
+
+[hubs.copy_paste]
+description = "copying code from the internet and hoping it works"
+queries = ["copy paste keyboard smash", "chef kiss stack overflow"]
+
+[hubs.build_broken]
+description = "the build failed, compiler errors everywhere, type errors and mismatched types"
+queries = ["everything is broken panic", "error error error glitch"]
+
+[hubs.missing_docs]
+description = "the documentation for this api or tool is missing, outdated, or unhelpful"
+queries = ["reading blank book confused", "map leads nowhere lost"]
+
+[hubs.meeting_overload]
+description = "too many meetings, no time for actual work"
+queries = ["this meeting could have been an email", "falling asleep in meeting"]
+
+[hubs.burnout]
+description = "exhausted and burned out from working too long"
+queries = ["melting exhausted tired", "running on empty"]
+
+[hubs.late_night]
+description = "coding way past midnight, deep into the night"
+queries = ["3am coding zombie", "owl night shift"]
+
+[hubs.caffeine]
+description = "desperately need coffee or caffeine to function"
+queries = ["coffee iv drip", "chugging coffee frantically"]
+
+[hubs.ship_it]
+description = "shipping a release to production, launching to users"
+queries = ["rocket launch liftoff", "ship it squirrel"]
+
+[hubs.suspicious_first_try]
+description = "it worked on the first attempt which is deeply suspicious"
+queries = ["suspicious squinting fry", "wait thats illegal"]
+
+[hubs.tests_lie]
+description = "the tests pass but the application is still broken"
+queries = ["fake smile everything is good", "behind the curtain wizard of oz"]
+
+[hubs.flaky]
+description = "intermittent random failures that come and go unpredictably"
+queries = ["slot machine random", "schrodinger box maybe"]
+
+[hubs.dependency_hell]
+description = "package versions conflicting, dependency resolution nightmare"
+queries = ["tangled in christmas lights", "domino chain reaction fail"]
+
+[hubs.big_refactor]
+description = "massive refactor cleaning up and restructuring everything"
+queries = ["renovation demolition wall", "marie kondo tidying up"]
+
+[hubs.harsh_review]
+description = "harsh code review feedback tearing the changes apart"
+queries = ["simon cowell no", "red pen corrections everywhere"]
+
+[hubs.approved]
+description = "pull request approved, changes accepted, good to merge"
+queries = ["stamp of approval", "thumbs up approved seal"]
+
+[hubs.ai_magic]
+description = "the AI agent is doing everything automatically like magic"
+queries = ["robot typing fast", "magic wizard casting spell"]
+
+[hubs.chaos]
+description = "total mayhem, everything happening at once, complete chaos"
+queries = ["office chaos everything on fire", "juggling too many things"]
+
+[hubs.small_win]
+description = "a small satisfying win, modest progress worth acknowledging"
+queries = ["noice brooklyn nine nine", "little fist pump yes"]

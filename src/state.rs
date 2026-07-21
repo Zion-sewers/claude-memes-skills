@@ -110,6 +110,30 @@ pub fn bump_turns(session: &str) -> u64 {
         .unwrap_or(1)
 }
 
+/// Consume one unit of the hourly auto-mode budget. Returns false (deny) once
+/// `max_per_hour` firings have happened in the current clock hour. Append-only
+/// like the turn counter, so racing hooks can't double-spend below the cap.
+pub fn auto_budget_try_consume(max_per_hour: u32) -> bool {
+    if max_per_hour == 0 {
+        return false;
+    }
+    use std::io::Write;
+    let dir = state_dir().join("auto-budget");
+    let _ = std::fs::create_dir_all(&dir);
+    let hour = now_secs() / 3600;
+    let file = dir.join(hour.to_string());
+    let spent = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
+    if spent >= u64::from(max_per_hour) {
+        return false;
+    }
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&file)
+        .and_then(|mut f| f.write_all(b"."))
+        .is_ok()
+}
+
 /// Last-seen test outcome, used for fail->fail and fail->pass transitions.
 pub fn last_test() -> Option<String> {
     std::fs::read_to_string(state_dir().join("last-test"))
@@ -196,6 +220,15 @@ mod tests {
         assert_eq!(bump_turns("sess_t"), 1);
         assert_eq!(bump_turns("sess_t"), 2);
         assert_eq!(bump_turns("other"), 1);
+    }
+
+    #[test]
+    fn auto_budget_caps_per_hour() {
+        let _g = isolate();
+        assert!(auto_budget_try_consume(2));
+        assert!(auto_budget_try_consume(2));
+        assert!(!auto_budget_try_consume(2));
+        assert!(!auto_budget_try_consume(0));
     }
 
     #[test]

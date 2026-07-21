@@ -4,9 +4,11 @@
 //! events. It resolves the event to a Giphy search, fetches+caches a GIF, and
 //! renders it inline in your terminal. No yt-dlp, no ffmpeg, no popups.
 
+mod auto;
 mod config;
 mod daemon;
 mod detect;
+mod embed;
 mod giphy;
 mod notify;
 mod render;
@@ -68,6 +70,11 @@ enum Cmd {
     },
     /// Print the hook payload shapes observed so far (field names only, no values).
     Shapes,
+    /// Rank the emotion hubs for a concept (downloads the ~30MB model on first use).
+    Find {
+        /// A workflow moment in plain words, e.g. "cargo build exploded with 47 errors".
+        concept: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -110,6 +117,7 @@ fn run(cli: Cli) -> Result<()> {
             shapes::print_all();
             Ok(())
         }
+        Cmd::Find { concept } => cmd_find(&concept),
     }
 }
 
@@ -118,11 +126,79 @@ fn run(cli: Cli) -> Result<()> {
 fn cmd_watch(port_override: Option<u16>) -> Result<()> {
     let reg = Registry::load()?;
     let port = port_override.unwrap_or(reg.settings.watch_port);
-    daemon::run(port, |event| {
-        if let Err(e) = cmd_play(event, false, false) {
-            eprintln!("claude-memes watch: {e:#}");
+    // The engine loads lazily on the first concept and lives for the daemon's
+    // lifetime, amortizing model load to zero for every later suggestion.
+    let engine: std::cell::OnceCell<Option<auto::Engine>> = std::cell::OnceCell::new();
+    daemon::run(port, |msg| match msg {
+        daemon::Msg::Event(event) => {
+            if let Err(e) = cmd_play(&event, false, false) {
+                eprintln!("claude-memes watch: {e:#}");
+            }
+        }
+        daemon::Msg::Concept(concept) => {
+            if !reg.settings.auto {
+                return;
+            }
+            let engine = engine.get_or_init(|| match auto::Engine::load(true) {
+                Ok(e) => Some(e),
+                Err(e) => {
+                    eprintln!("claude-memes watch: auto mode unavailable: {e:#}");
+                    None
+                }
+            });
+            let Some(engine) = engine else { return };
+            if let Some((hub, score, query)) = engine.suggest(&concept, reg.settings.auto_threshold)
+            {
+                // Gates consume state only when we actually intend to render.
+                if state::cooldown_ok(&format!("auto__{hub}"), 3600)
+                    && state::auto_budget_try_consume(reg.settings.auto_per_hour)
+                {
+                    println!("auto: {hub} ({score:.2}) → \"{query}\"");
+                    match giphy::fetch_gif(&format!("auto_{hub}"), &query, &reg.settings) {
+                        Ok(bytes) => {
+                            if let Err(e) = render::play(&bytes, &reg.settings) {
+                                eprintln!("claude-memes watch: {e:#}");
+                            }
+                        }
+                        Err(e) => eprintln!("claude-memes watch: {e:#}"),
+                    }
+                }
+            }
         }
     })
+}
+
+// ----- find ----------------------------------------------------------------
+
+fn cmd_find(concept: &str) -> Result<()> {
+    let reg = Registry::load()?;
+    if !embed::model_cached() {
+        println!(
+            "downloading embedding model {} (~30MB, one-time)…",
+            embed::MODEL_ID
+        );
+    }
+    let engine = auto::Engine::load(true)?;
+    println!("concept: {concept}\n");
+    for (name, score) in engine.top(concept).iter().take(5) {
+        let fires = if *score >= reg.settings.auto_threshold {
+            "→"
+        } else {
+            " "
+        };
+        let query = engine
+            .hubs
+            .hubs
+            .get(*name)
+            .map(|h| h.queries.join(" | "))
+            .unwrap_or_default();
+        println!("{fires} {score:>6.3}  {name:<22} {query}");
+    }
+    println!(
+        "\nthreshold: {} (auto mode fires on '→' rows; tune auto_threshold in events.toml)",
+        reg.settings.auto_threshold
+    );
+    Ok(())
 }
 
 // ----- play ----------------------------------------------------------------
@@ -175,7 +251,20 @@ fn cmd_hook(kind: HookKind) -> Result<()> {
         }
 
         let mut sequence = None;
-        for event in events_for_hook(&kind, &payload) {
+        let mut events = events_for_hook(&kind, &payload);
+
+        // Auto mode: an unmapped moment (no curated event, or only the generic
+        // skill clip) becomes a concept for semantic hub matching.
+        if reg.settings.auto && (events.is_empty() || events == ["skill_loaded"]) {
+            if let Some(concept) = concept_for(&kind, &payload) {
+                events.clear();
+                if !daemon::try_send_concept(reg.settings.watch_port, &concept) {
+                    sequence = local_auto_suggest(&reg, &concept);
+                }
+            }
+        }
+
+        for event in events {
             let delivered = deliver(&reg, &event);
             // First undeliverable event falls back to a terminalSequence
             // notification (one per hook response).
@@ -213,6 +302,50 @@ fn kind_label(kind: &HookKind) -> &'static str {
         HookKind::Stop => "Stop",
         HookKind::Observe => "Observe",
     }
+}
+
+/// Build a concept for auto mode from an unmapped hook payload.
+fn concept_for(kind: &HookKind, payload: &serde_json::Value) -> Option<String> {
+    match kind {
+        HookKind::Bash => {
+            let command = payload
+                .pointer("/tool_input/command")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            auto::bash_concept(command, &response_text(payload))
+        }
+        HookKind::Skill => {
+            let skill = payload
+                .pointer("/tool_input/skill")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            auto::skill_concept(skill)
+        }
+        HookKind::Stop | HookKind::Observe => None,
+    }
+}
+
+/// Daemon-less auto path: suggest locally and emit a notification. Never
+/// downloads the model (hooks must stay fast) and consumes gate state only
+/// after a deliverable suggestion exists.
+fn local_auto_suggest(reg: &Registry, concept: &str) -> Option<String> {
+    if !embed::model_cached() {
+        return None;
+    }
+    let engine = auto::Engine::load(false).ok()?;
+    let (hub, _score, query) = engine.suggest(concept, reg.settings.auto_threshold)?;
+    let seq = notify::sequence(
+        &reg.settings.notify,
+        "claude-memes",
+        &format!("{hub}: {query}"),
+    )?;
+    if !state::cooldown_ok(&format!("auto__{hub}"), 3600) {
+        return None;
+    }
+    if !state::auto_budget_try_consume(reg.settings.auto_per_hour) {
+        return None;
+    }
+    Some(seq)
 }
 
 /// Delivery tiers: watch daemon (inline GIF in the user's own terminal) →
@@ -407,6 +540,20 @@ fn cmd_doctor() -> Result<()> {
             "empty (will populate on first event)".into(),
         ),
     }
+
+    let auto_on = reg.as_ref().map(|r| r.settings.auto).unwrap_or(false);
+    let model_ready = embed::model_cached();
+    print_check(
+        "auto mode",
+        !auto_on || model_ready,
+        match (auto_on, model_ready) {
+            (false, _) => "disabled".into(),
+            (true, true) => format!("on — model cached ({})", embed::MODEL_ID),
+            (true, false) => {
+                "on, but model not downloaded — run `claude-memes find \"test\"` once".into()
+            }
+        },
+    );
 
     println!(
         "\nConfig:   {}",
