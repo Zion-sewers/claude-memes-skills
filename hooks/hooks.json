@@ -1,0 +1,40 @@
+{
+  "description": "claude-memes: observational hooks (always exit 0, never block). Requires the claude-memes binary on PATH — install via `cargo binstall claude-memes` or a Releases download.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "claude-memes hook bash", "timeout": 5000 }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          { "type": "command", "command": "claude-memes hook skill", "timeout": 5000 }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          { "type": "command", "command": "claude-memes hook observe", "timeout": 5000 }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          { "type": "command", "command": "claude-memes hook observe", "timeout": 5000 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "claude-memes hook stop", "timeout": 5000 }
+        ]
+      }
+    ]
+  }
+}

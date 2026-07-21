@@ -38,6 +38,12 @@ pub struct Settings {
     pub max_frames: usize,
     #[serde(default = "default_cache_ttl")]
     pub cache_ttl_secs: u64,
+    /// terminalSequence notification style: "osc9" | "osc777" | "off".
+    #[serde(default = "default_notify")]
+    pub notify: String,
+    /// Localhost port for the `watch` daemon.
+    #[serde(default = "default_watch_port")]
+    pub watch_port: u16,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -60,6 +66,8 @@ impl Default for Settings {
                 loops: default_loops(),
                 max_frames: default_max_frames(),
                 cache_ttl_secs: default_cache_ttl(),
+                notify: default_notify(),
+                watch_port: default_watch_port(),
             })
     }
 }
@@ -84,6 +92,12 @@ fn default_max_frames() -> usize {
 }
 fn default_cache_ttl() -> u64 {
     86_400
+}
+fn default_notify() -> String {
+    "osc9".to_string()
+}
+fn default_watch_port() -> u16 {
+    42_741
 }
 
 impl Registry {

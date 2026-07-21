@@ -1,0 +1,13 @@
+{
+  "name": "claude-memes",
+  "description": "Event-driven meme GIFs for your coding workflow: tests fail → Thanos, all green → LeBron. Renders inline via the watch daemon or as desktop notifications.",
+  "version": "1.1.0",
+  "author": {
+    "name": "Shoval Benjer",
+    "url": "https://github.com/ShovalBenjer"
+  },
+  "homepage": "https://github.com/ShovalBenjer/claude-memes-skills",
+  "repository": "https://github.com/ShovalBenjer/claude-memes-skills",
+  "license": "MIT",
+  "keywords": ["memes", "giphy", "hooks", "fun", "feedback"]
+}
