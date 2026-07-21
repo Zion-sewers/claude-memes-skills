@@ -1,0 +1,33 @@
+{
+  "_readme": "OpenAI Codex CLI adapter for claude-memes. Copy this file to ~/.codex/hooks.json (or merge into an existing one), with the claude-memes binary on PATH. Codex's hook payload schema deliberately mirrors Claude Code's, so the same binary works; PostToolUse routes through the same detection as Claude Code's Bash hook, everything else is observe-only until real payload shapes accumulate (`claude-memes shapes`). Requires trusting the hooks via /hooks inside Codex. Status: experimental.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "claude-memes hook bash", "timeout": 5000 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "claude-memes hook stop", "timeout": 5000 }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "claude-memes hook observe", "timeout": 5000 }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "claude-memes hook observe", "timeout": 5000 }
+        ]
+      }
+    ]
+  }
+}

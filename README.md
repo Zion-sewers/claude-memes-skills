@@ -45,6 +45,23 @@ $ claude-memes find "npm ERR! ERESOLVE unable to resolve dependency tree"
   (1/hour) → hourly budget (`auto_per_hour = 6`). A boring `ls` never reaches
   the model at all.
 - **Off switch**: `auto = false` in the registry.
+- **Self-tuning**: every delivered meme is logged (kind + name only);
+  `claude-memes dream` replays the log and prints ready-to-paste registry
+  snippets for auto hubs that keep recurring.
+
+## Beyond Claude Code
+
+- **VS Code Copilot agent mode** auto-detects this repo's plugin format — no
+  porting needed.
+- **OpenAI Codex CLI**: copy `adapters/codex/hooks.json` to `~/.codex/` (its
+  hook schema deliberately mirrors Claude Code's). Experimental.
+- **Cursor**: copy `adapters/cursor/hooks.json` to `.cursor/` — observe-only
+  for now; it accumulates real payload shapes so detection can be wired
+  against Cursor's actual schema. Experimental.
+- **Org agents / MCP**: `claude-memes mcp` serves `find_meme` (concept →
+  hub + score + query + GIF URL) and `play_meme` (event → watch daemon, or a
+  URL to post) over stdio — plug it into any MCP gateway or tool broker and a
+  Slack-routed agent can post the right meme itself.
 
 ---
 

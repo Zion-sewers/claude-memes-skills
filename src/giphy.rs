@@ -94,6 +94,13 @@ fn http_client() -> Result<reqwest::blocking::Client> {
         .context("building HTTP client")
 }
 
+/// Resolve a GIF URL for a query without downloading the bytes — used by the
+/// MCP server so org agents can post the URL wherever they live (e.g. Slack).
+pub fn resolve_url(query: &str, rating: &str) -> Result<String> {
+    let key = api_key()?;
+    resolve_gif_url(&key, query, rating)
+}
+
 /// Hit `/random` and pull a renderable GIF URL out of the response, preferring
 /// smaller renditions for fast terminal rendering.
 fn resolve_gif_url(key: &str, query: &str, rating: &str) -> Result<String> {
