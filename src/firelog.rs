@@ -95,8 +95,8 @@ pub fn dream(hubs: &crate::auto::HubFile) {
             _ => {}
         }
     }
-    curated.sort_by(|a, b| b.1.cmp(&a.1));
-    auto.sort_by(|a, b| b.1.cmp(&a.1));
+    curated.sort_by_key(|c| std::cmp::Reverse(c.1));
+    auto.sort_by_key(|a| std::cmp::Reverse(a.1));
 
     println!("dream report — what actually fired\n");
     println!(
