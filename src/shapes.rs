@@ -58,11 +58,9 @@ pub fn record(kind: &str, payload: &serde_json::Value) {
     let line = serde_json::json!({"event": event_name, "fields": fields}).to_string();
 
     let path = shapes_path();
+    crate::config::rotate_if_large(&path, MAX_LOG_BYTES);
     if let Ok(existing) = std::fs::read_to_string(&path) {
         if existing.lines().any(|l| l == line) {
-            return;
-        }
-        if existing.len() as u64 > MAX_LOG_BYTES {
             return;
         }
     }

@@ -165,6 +165,19 @@ pub fn config_dir() -> Option<PathBuf> {
     std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config").join("claude-memes"))
 }
 
+/// Rotate `path` to `<path>.old` once it exceeds `max_bytes`, so append-only
+/// logs keep recent data flowing instead of silently stopping at the cap.
+pub fn rotate_if_large(path: &std::path::Path, max_bytes: u64) {
+    let too_big = std::fs::metadata(path)
+        .map(|m| m.len() > max_bytes)
+        .unwrap_or(false);
+    if too_big {
+        let mut old = path.as_os_str().to_owned();
+        old.push(".old");
+        let _ = std::fs::rename(path, std::path::PathBuf::from(old));
+    }
+}
+
 /// `$XDG_CACHE_HOME/claude-memes` or `~/.cache/claude-memes`.
 pub fn cache_dir() -> PathBuf {
     if let Ok(xdg) = std::env::var("XDG_CACHE_HOME") {
@@ -199,6 +212,24 @@ mod tests {
                 "event {name} has an empty query"
             );
         }
+    }
+
+    #[test]
+    fn rotate_moves_oversized_files_and_keeps_small_ones() {
+        let dir = std::env::temp_dir().join(format!("cm-rotate-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("log.jsonl");
+
+        std::fs::write(&path, "small").unwrap();
+        rotate_if_large(&path, 100);
+        assert!(path.exists(), "small file must not rotate");
+
+        std::fs::write(&path, "x".repeat(200)).unwrap();
+        rotate_if_large(&path, 100);
+        assert!(!path.exists(), "oversized file must rotate away");
+        assert!(dir.join("log.jsonl.old").exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
