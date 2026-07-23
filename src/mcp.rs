@@ -14,14 +14,23 @@
 //! MCP clients need (initialize / tools/list / tools/call / ping) is small
 //! enough that a dependency would cost more than these ~150 lines.
 
+use std::cell::RefCell;
 use std::io::{BufRead, Write};
 
 use anyhow::Result;
 use serde_json::{json, Value};
 
+use crate::auto::Engine;
 use crate::config::Registry;
 
+/// Lazily-loaded engine shared across all tool calls in one server session,
+/// so only the first `find_meme` pays the model load (and possible download).
+/// A RefCell (not OnceCell) so a *failed* load is retried on the next call
+/// instead of being cached as a permanent error.
+type EngineCell = RefCell<Option<Engine>>;
+
 pub fn serve() -> Result<()> {
+    let engine: EngineCell = RefCell::new(None);
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout().lock();
     for line in stdin.lock().lines() {
@@ -32,7 +41,7 @@ pub fn serve() -> Result<()> {
         let Ok(request) = serde_json::from_str::<Value>(&line) else {
             continue;
         };
-        if let Some(response) = handle(&request) {
+        if let Some(response) = handle(&request, &engine) {
             writeln!(stdout, "{response}")?;
             stdout.flush()?;
         }
@@ -41,7 +50,7 @@ pub fn serve() -> Result<()> {
 }
 
 /// Route one JSON-RPC message. Notifications (no `id`) get no response.
-pub fn handle(request: &Value) -> Option<Value> {
+pub fn handle(request: &Value, engine: &EngineCell) -> Option<Value> {
     let method = request.get("method")?.as_str()?;
     let id = request.get("id").filter(|v| !v.is_null()).cloned();
     match method {
@@ -74,7 +83,7 @@ pub fn handle(request: &Value) -> Option<Value> {
                 .pointer("/params/arguments")
                 .cloned()
                 .unwrap_or_else(|| json!({}));
-            Some(match call_tool(name, &args) {
+            Some(match call_tool(name, &args, engine) {
                 Ok(text) => result(id, json!({ "content": [{ "type": "text", "text": text }] })),
                 Err(e) => result(
                     id,
@@ -95,7 +104,7 @@ fn tool_definitions() -> Value {
     json!([
         {
             "name": "find_meme",
-            "description": "Match a developer-workflow moment to an emotion-hub meme. Returns the best hub, similarity score, Giphy search query, and a GIF URL when a GIPHY_API_KEY is configured.",
+            "description": "Match a developer-workflow moment to an emotion-hub meme. Returns the best hub, similarity score, Giphy search query, and a GIF URL when a GIPHY_API_KEY is configured. The first call in a session may take a few seconds while the ~30MB local embedding model loads (or downloads, once ever).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -124,7 +133,7 @@ fn tool_definitions() -> Value {
     ])
 }
 
-fn call_tool(name: &str, args: &Value) -> Result<String> {
+fn call_tool(name: &str, args: &Value, engine_cell: &EngineCell) -> Result<String> {
     match name {
         "find_meme" => {
             let concept = args
@@ -132,7 +141,13 @@ fn call_tool(name: &str, args: &Value) -> Result<String> {
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| anyhow::anyhow!("missing required argument: concept"))?;
             let reg = Registry::load()?;
-            let engine = crate::auto::Engine::load(true)?;
+            let mut slot = engine_cell.borrow_mut();
+            if slot.is_none() {
+                // Propagate load errors without caching them — the next call
+                // retries (transient network/download failures recover).
+                *slot = Some(Engine::load(true)?);
+            }
+            let engine = slot.as_ref().expect("engine just initialized");
             let ranked = engine.top(concept);
             let (hub, score) = ranked
                 .first()
@@ -187,11 +202,15 @@ fn error(id: Value, code: i64, message: &str) -> Value {
 mod tests {
     use super::*;
 
+    fn cell() -> EngineCell {
+        RefCell::new(None)
+    }
+
     #[test]
     fn initialize_handshake() {
         let req = json!({"jsonrpc":"2.0","id":1,"method":"initialize",
             "params":{"protocolVersion":"2025-06-18","capabilities":{}}});
-        let resp = handle(&req).unwrap();
+        let resp = handle(&req, &cell()).unwrap();
         assert_eq!(resp["id"], 1);
         assert_eq!(resp["result"]["serverInfo"]["name"], "claude-memes");
         assert_eq!(resp["result"]["protocolVersion"], "2025-06-18");
@@ -200,7 +219,7 @@ mod tests {
     #[test]
     fn tools_list_exposes_both_tools() {
         let req = json!({"jsonrpc":"2.0","id":2,"method":"tools/list"});
-        let resp = handle(&req).unwrap();
+        let resp = handle(&req, &cell()).unwrap();
         let tools = resp["result"]["tools"].as_array().unwrap();
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert_eq!(names, vec!["find_meme", "play_meme"]);
@@ -212,13 +231,13 @@ mod tests {
     #[test]
     fn notifications_get_no_response() {
         let req = json!({"jsonrpc":"2.0","method":"notifications/initialized"});
-        assert!(handle(&req).is_none());
+        assert!(handle(&req, &cell()).is_none());
     }
 
     #[test]
     fn unknown_request_gets_error() {
         let req = json!({"jsonrpc":"2.0","id":3,"method":"resources/list"});
-        let resp = handle(&req).unwrap();
+        let resp = handle(&req, &cell()).unwrap();
         assert_eq!(resp["error"]["code"], -32601);
     }
 
@@ -226,7 +245,7 @@ mod tests {
     fn tool_call_with_missing_args_is_error_content() {
         let req = json!({"jsonrpc":"2.0","id":4,"method":"tools/call",
             "params":{"name":"find_meme","arguments":{}}});
-        let resp = handle(&req).unwrap();
+        let resp = handle(&req, &cell()).unwrap();
         assert_eq!(resp["result"]["isError"], true);
     }
 }

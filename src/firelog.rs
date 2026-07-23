@@ -24,11 +24,7 @@ fn log_path() -> PathBuf {
 /// event or hub name. Best-effort, size-capped, never fails the caller.
 pub fn record(kind: &str, label: &str) {
     let path = log_path();
-    if let Ok(meta) = std::fs::metadata(&path) {
-        if meta.len() > MAX_LOG_BYTES {
-            return;
-        }
-    }
+    crate::config::rotate_if_large(&path, MAX_LOG_BYTES);
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }

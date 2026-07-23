@@ -1,6 +1,6 @@
 [package]
 name = "claude-memes"
-version = "1.3.0"
+version = "1.3.1"
 edition = "2021"
 rust-version = "1.82"
 description = "Event-driven meme GIFs for Claude Code — fetched from Giphy, rendered inline in your terminal."
