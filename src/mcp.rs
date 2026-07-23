@@ -14,7 +14,7 @@
 //! MCP clients need (initialize / tools/list / tools/call / ping) is small
 //! enough that a dependency would cost more than these ~150 lines.
 
-use std::cell::OnceCell;
+use std::cell::RefCell;
 use std::io::{BufRead, Write};
 
 use anyhow::Result;
@@ -25,10 +25,12 @@ use crate::config::Registry;
 
 /// Lazily-loaded engine shared across all tool calls in one server session,
 /// so only the first `find_meme` pays the model load (and possible download).
-type EngineCell = OnceCell<Option<Engine>>;
+/// A RefCell (not OnceCell) so a *failed* load is retried on the next call
+/// instead of being cached as a permanent error.
+type EngineCell = RefCell<Option<Engine>>;
 
 pub fn serve() -> Result<()> {
-    let engine: EngineCell = OnceCell::new();
+    let engine: EngineCell = RefCell::new(None);
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout().lock();
     for line in stdin.lock().lines() {
@@ -139,12 +141,13 @@ fn call_tool(name: &str, args: &Value, engine_cell: &EngineCell) -> Result<Strin
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| anyhow::anyhow!("missing required argument: concept"))?;
             let reg = Registry::load()?;
-            let engine = engine_cell
-                .get_or_init(|| Engine::load(true).ok())
-                .as_ref()
-                .ok_or_else(|| {
-                    anyhow::anyhow!("embedding engine unavailable (model load/download failed)")
-                })?;
+            let mut slot = engine_cell.borrow_mut();
+            if slot.is_none() {
+                // Propagate load errors without caching them — the next call
+                // retries (transient network/download failures recover).
+                *slot = Some(Engine::load(true)?);
+            }
+            let engine = slot.as_ref().expect("engine just initialized");
             let ranked = engine.top(concept);
             let (hub, score) = ranked
                 .first()
@@ -200,7 +203,7 @@ mod tests {
     use super::*;
 
     fn cell() -> EngineCell {
-        OnceCell::new()
+        RefCell::new(None)
     }
 
     #[test]

@@ -167,6 +167,10 @@ pub fn config_dir() -> Option<PathBuf> {
 
 /// Rotate `path` to `<path>.old` once it exceeds `max_bytes`, so append-only
 /// logs keep recent data flowing instead of silently stopping at the cap.
+///
+/// Exactly one rotated generation is retained: an existing `<path>.old` is
+/// deliberately replaced, bounding total disk use at ~2× `max_bytes`. These
+/// are best-effort diagnostic logs, not durable records.
 pub fn rotate_if_large(path: &std::path::Path, max_bytes: u64) {
     let too_big = std::fs::metadata(path)
         .map(|m| m.len() > max_bytes)

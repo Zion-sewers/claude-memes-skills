@@ -125,8 +125,10 @@ fn cmd_watch(port_override: Option<u16>) -> Result<()> {
     let reg = Registry::load()?;
     let port = port_override.unwrap_or(reg.settings.watch_port);
     // The engine loads lazily on the first concept and lives for the daemon's
-    // lifetime, amortizing model load to zero for every later suggestion.
-    let engine: std::cell::OnceCell<Option<auto::Engine>> = std::cell::OnceCell::new();
+    // lifetime, amortizing model load to zero for every later suggestion. A
+    // RefCell (not OnceCell) so a failed load is retried on the next concept
+    // instead of disabling auto mode for the daemon's lifetime.
+    let engine: std::cell::RefCell<Option<auto::Engine>> = std::cell::RefCell::new(None);
     daemon::run(port, |msg| match msg {
         daemon::Msg::Event(event) => {
             if let Err(e) = cmd_play(&event, false, false) {
@@ -137,14 +139,17 @@ fn cmd_watch(port_override: Option<u16>) -> Result<()> {
             if !reg.settings.auto {
                 return;
             }
-            let engine = engine.get_or_init(|| match auto::Engine::load(true) {
-                Ok(e) => Some(e),
-                Err(e) => {
-                    eprintln!("claude-memes watch: auto mode unavailable: {e:#}");
-                    None
+            let mut slot = engine.borrow_mut();
+            if slot.is_none() {
+                match auto::Engine::load(true) {
+                    Ok(e) => *slot = Some(e),
+                    Err(e) => {
+                        eprintln!("claude-memes watch: auto mode unavailable (will retry): {e:#}");
+                        return;
+                    }
                 }
-            });
-            let Some(engine) = engine else { return };
+            }
+            let engine = slot.as_ref().expect("engine just initialized");
             if let Some((hub, score, query)) = engine.suggest(&concept, reg.settings.auto_threshold)
             {
                 // Gates consume state only when we actually intend to render.
