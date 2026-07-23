@@ -9,7 +9,9 @@ mod config;
 mod daemon;
 mod detect;
 mod embed;
+mod firelog;
 mod giphy;
+mod mcp;
 mod notify;
 mod render;
 mod shapes;
@@ -75,6 +77,10 @@ enum Cmd {
         /// A workflow moment in plain words, e.g. "cargo build exploded with 47 errors".
         concept: String,
     },
+    /// Serve find_meme/play_meme over MCP (stdio) for org agents and gateways.
+    Mcp,
+    /// Replay the firing log: what fired, and which auto hubs earned promotion.
+    Dream,
 }
 
 #[derive(Subcommand)]
@@ -118,6 +124,11 @@ fn run(cli: Cli) -> Result<()> {
             Ok(())
         }
         Cmd::Find { concept } => cmd_find(&concept),
+        Cmd::Mcp => mcp::serve(),
+        Cmd::Dream => {
+            firelog::dream(&auto::hubs()?);
+            Ok(())
+        }
     }
 }
 
@@ -156,6 +167,7 @@ fn cmd_watch(port_override: Option<u16>) -> Result<()> {
                     println!("auto: {hub} ({score:.2}) → \"{query}\"");
                     match giphy::fetch_gif(&format!("auto_{hub}"), &query, &reg.settings) {
                         Ok(bytes) => {
+                            firelog::record("auto", &hub);
                             if let Err(e) = render::play(&bytes, &reg.settings) {
                                 eprintln!("claude-memes watch: {e:#}");
                             }
@@ -266,6 +278,9 @@ fn cmd_hook(kind: HookKind) -> Result<()> {
 
         for event in events {
             let delivered = deliver(&reg, &event);
+            if delivered {
+                firelog::record("curated", &event);
+            }
             // First undeliverable event falls back to a terminalSequence
             // notification (one per hook response).
             if !delivered && sequence.is_none() {
@@ -276,6 +291,9 @@ fn cmd_hook(kind: HookKind) -> Result<()> {
                     _ => event.clone(),
                 };
                 sequence = notify::sequence(&reg.settings.notify, "claude-memes", &body);
+                if sequence.is_some() {
+                    firelog::record("curated", &event);
+                }
             }
         }
         Ok(match sequence {
@@ -345,6 +363,7 @@ fn local_auto_suggest(reg: &Registry, concept: &str) -> Option<String> {
     if !state::auto_budget_try_consume(reg.settings.auto_per_hour) {
         return None;
     }
+    firelog::record("auto", &hub);
     Some(seq)
 }
 

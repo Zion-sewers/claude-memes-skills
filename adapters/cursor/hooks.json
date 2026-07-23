@@ -1,0 +1,18 @@
+{
+  "_readme": "Cursor adapter for claude-memes. Copy to <project>/.cursor/hooks.json or ~/.cursor/hooks.json with the claude-memes binary on PATH. Cursor's hook payloads differ from Claude Code's, so this adapter is fully observe-only: it records payload field shapes (`claude-memes shapes`, field names only — never values) so detection can be wired against real schemas in a later release. Cursor hooks are beta and IDE-only for most events. Status: experimental.",
+  "version": 1,
+  "hooks": {
+    "afterShellExecution": [
+      { "command": "claude-memes hook observe" }
+    ],
+    "postToolUseFailure": [
+      { "command": "claude-memes hook observe" }
+    ],
+    "stop": [
+      { "command": "claude-memes hook observe" }
+    ],
+    "sessionStart": [
+      { "command": "claude-memes hook observe" }
+    ]
+  }
+}
