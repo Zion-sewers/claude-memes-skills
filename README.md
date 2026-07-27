@@ -73,7 +73,7 @@ This is a ground-up rewrite of the original bash + yt-dlp + ffmpeg project. The 
 |-----|-----|
 | YouTube clips via `yt-dlp` (fragile, ToS-gray, half the URLs were placeholders) | **Giphy API** — one key, on-demand search, legally clean |
 | `ffplay` popup window (desktop-only, invisible on web/cloud) | **Inline terminal GIF** via Kitty / iTerm2 / Unicode half-blocks |
-| ffmpeg + a venv + LanceDB + a 150 MB embedding model | **One static Rust binary**, ~3 crates of real surface area |
+| ffmpeg + a venv + LanceDB + a 150 MB embedding model | **One static Rust binary**, 15 source files and 9 direct dependencies |
 | 7 bash scripts + JSON config | `claude-memes` + one TOML registry |
 
 Rendering goes to `/dev/tty`, so the GIF lands in your real terminal even though Claude Code captures the hook's stdout. No controlling terminal (a cloud session)? It silently skips — hooks never break your session.
@@ -143,6 +143,54 @@ export GIPHY_API_KEY=your_key_here     # add to ~/.bashrc / ~/.zshrc
 claude-memes doctor                    # checks key, terminal, registry, cache
 claude-memes play tests_all_pass       # should pop a LeBron GIF in your terminal
 ```
+
+---
+
+## Measured
+
+Every number here came from a command, listed beside it so you can re-run it.
+
+| | | how it was measured |
+|---|---:|---|
+| Rust source files | 15 | `git ls-files '*.rs'` |
+| Source bytes | 104,523 | tree API, `.rs` blobs summed |
+| Test functions | 60 | `grep -c '#\[test\]'` across `src/` |
+| Source files carrying tests | 14 of 15 | same |
+| Direct dependencies | 9 | `[dependencies]` in `Cargo.toml` |
+| Packages in the lockfile | 281 | `grep -c '^\[\[package\]\]' Cargo.lock` |
+
+CI runs four gates on every push, and clippy is set to fail on warnings rather
+than report them:
+
+```
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
+cargo test --all
+cargo build --release
+```
+
+What that does **not** tell you: there is no benchmark, so the render latency is
+unmeasured, and there is no coverage report, so 60 tests over 14 files is a count
+and not a percentage.
+
+---
+
+## What it does not do, and what fails
+
+The honest failure modes, in the order you are likely to hit them.
+
+| Situation | What happens |
+|---|---|
+| No `GIPHY_API_KEY` set | No GIF. The hook exits cleanly; your session is unaffected |
+| Giphy is down, rate-limits you, or the network is gone | No GIF, same clean exit. There is no cache and no offline fallback |
+| No controlling terminal (cloud session, CI, some IDE panes) | Rendering is skipped silently by design, because a hook that fails must never take the session with it |
+| Terminal without Kitty or iTerm2 graphics | Falls back to Unicode half-blocks. It works and it looks worse. `claude-memes doctor` tells you which you will get before you install |
+| Terminal without truecolor | Below the half-block fallback there is nothing left to degrade to |
+| You dislike the clip Giphy picked | The query pools in `config/hubs.toml` are editable; the search result is not deterministic |
+
+It is also, deliberately, not useful. It renders a GIF when a hook fires. It does
+not analyse your tests, change your workflow, or make anything faster. If that is
+not what you want from a plugin, this is the wrong plugin.
 
 ---
 
