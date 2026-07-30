@@ -35,6 +35,10 @@ jobs:
       - name: Build release
         run: cargo build --release
 
+      - name: Notify on failure
+        if: failure()
+        run: echo "::error::CI job failed — check the logs above for details"
+
   giphy-smoke:
     name: live Giphy smoke test
     runs-on: ubuntu-latest
@@ -75,3 +79,7 @@ jobs:
             fi
           done
           exit $failed
+
+      - name: Notify on failure
+        if: failure()
+        run: echo "::error::CI job failed — check the logs above for details"
