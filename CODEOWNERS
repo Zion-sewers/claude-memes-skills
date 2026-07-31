@@ -1,0 +1,8 @@
+# CODEOWNERS
+
+*       @claude-setup/owners
+.github/workflows/ @claude-setup/owners
+adapters/ @claude-setup/owners
+config/ @claude-setup/owners
+hooks/ @claude-setup/owners
+src/ @claude-setup/owners
